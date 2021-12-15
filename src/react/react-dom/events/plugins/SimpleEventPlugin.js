@@ -1,16 +1,34 @@
-import { simpleEventPluginEvents, topLevelEventsToReactNames } from "../DOMEventProperties";
-import { registerTwoPhaseEvent } from "../EventRegistry";
+import {
+  registerSimpleEvents,
+  topLevelEventsToReactNames,
+} from "../DOMEventProperties";
+import { IS_CAPTURE_PHASE } from "../EventSystemFlags";
+import { SyntheticPointerEvent, SyntheticEvent } from "../SyntheticEvent";
 
-function registerSimpleEvent(domEventName, reactName) {
-    topLevelEventsToReactNames.set(domEventName, reactName)
-    registerTwoPhaseEvent(reactName, [domEventName])
+function extractEvents(
+  dispatchQueue,
+  domEventName,
+  targetInst,
+  nativeEvent,
+  nativeEventTarget,
+  eventSystemFlags,
+  targetContainer
+) {
+  const reactName = topLevelEventsToReactNames.get(domEventName);
+  if (reactName === undefined) return;
+  let SyntheticEventCtor = SyntheticEvent;
+  let reactEventType = domEventName;
+  switch (domEventName) {
+    case "click":
+      SyntheticEventCtor = SyntheticPointerEvent;
+      break;
+  }
+
+  const inCapturePhase = (eventSystemFlags & IS_CAPTURE_PHASE) !== 0;
+
+  const accumulateTargetOnly = !inCapturePhase && domEventName === "scroll";
+
+  const listeners = accumulateSinglePhaseListeners(targetInst, reactName, nativeEvent.type, inCapturePhase, accumulateTargetOnly, nativeEvent)
 }
 
-export function registerSimpleEvents() {
-    for(let i = 0; i < simpleEventPluginEvents.length; i++) {
-        const eventName = simpleEventPluginEvents[i]
-        const domEventName = eventName.toLowerCase()
-        const capitalizedEvent = eventName[0].toUpperCase() + eventName.slice(1)
-        registerSimpleEvent(domEventName, 'on' + capitalizedEvent)
-    }
-}
+export { registerSimpleEvents as registerEvents, extractEvents };

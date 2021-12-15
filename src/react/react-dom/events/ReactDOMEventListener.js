@@ -3,8 +3,15 @@ import {
   getCurrentUpdatePriority,
   setCurrentUpdatePriority,
 } from "@react/react-reconciler/ReactEventPriorities";
-import { IS_CAPTURE_PHASE } from "./EventSystemFlags";
+import { IS_CAPTURE_PHASE, IS_REPLAYED } from "./EventSystemFlags";
 import { hasQueuedDiscreteEvents } from "./ReactDOMEventReplaying";
+import getEventTarget from "./getEventTarget";
+import { getClosestInstanceFromNode } from "../client/ReactDomComponentTree";
+import { getNearestMountedFiber } from "@react/react-reconciler/ReactFiberTreeReflection";
+import { HostRoot } from "@react/react-reconciler/ReactWorkTags";
+import { dispatchEventForPluginEventSystem } from "./DOMPluginEventSystem";
+
+const queuedDiscreteEvents = [];
 
 export function createEventListenerWrapperWithPriority(
   targetContainer,
@@ -19,8 +26,9 @@ export function createEventListenerWrapperWithPriority(
   }
 }
 
+//TODO: react离散事件，待完成
 function dispatchDiscreteEvent(
-  domName,
+  domEventName,
   eventSystemFlags,
   container,
   nativeEvent
@@ -28,11 +36,75 @@ function dispatchDiscreteEvent(
   const previousPriority = getCurrentUpdatePriority();
   try {
     setCurrentUpdatePriority(DiscreteEventPriority);
-    //TODO: react离散事件，待完成
-    dispatchEvent();
+    dispatchEvent(domEventName, eventSystemFlags, container, nativeEvent);
   } finally {
     setCurrentUpdatePriority(previousPriority);
   }
+}
+
+function createQueuedReplayableEvent(
+  blockedOn,
+  domEventName,
+  eventSystemFlags,
+  targetContainer,
+  nativeEvent
+) {
+  return {
+    blockedOn,
+    domEventName,
+    eventSystemFlags: eventSystemFlags | IS_REPLAYED,
+    nativeEvent,
+    targetContainer: [targetContainer],
+  };
+}
+
+export function queueDiscreteEvent(
+  blockedOn,
+  domEventName,
+  eventSystemFlags,
+  targetContainer,
+  nativeEvent
+) {
+  const queuedEvent = createQueuedReplayableEvent(
+    blockedOn,
+    domEventName,
+    eventSystemFlags,
+    targetContainer,
+    nativeEvent
+  );
+  queuedDiscreteEvents.push(queuedEvent);
+}
+
+export function attemptToDispatchEvent(
+  domEventName,
+  eventSystemFlags,
+  targetContainer,
+  nativeEvent
+) {
+  const nativeEventTarget = getEventTarget(nativeEvent);
+  let targetInst = getClosestInstanceFromNode(nativeEventTarget);
+
+  if (targetInst !== null) {
+    const nearestMounted = getNearestMountedFiber(targetInst);
+    if (nearestMounted === null) {
+      targetInst = null;
+    } else {
+      const tag = nearestMounted.tag;
+      if (tag === HostRoot) {
+        targetInst = null;
+      } else if (nearestMounted !== targetInst) {
+        targetInst = null;
+      }
+    }
+  }
+  dispatchEventForPluginEventSystem(
+    domEventName,
+    eventSystemFlags,
+    nativeEvent,
+    targetInst,
+    targetContainer
+  );
+  return null;
 }
 
 export function dispatchEvent(
@@ -45,7 +117,22 @@ export function dispatchEvent(
   const allowReplay = (eventSystemFlags & IS_CAPTURE_PHASE) === 0;
 
   if (allowReplay && hasQueuedDiscreteEvents()) {
+    queueDiscreteEvent(
+      null,
+      domEventName,
+      eventSystemFlags,
+      targetContainer,
+      nativeEvent
+    );
+    return;
   }
+
+  let blockedOn = attemptToDispatchEvent(
+    domEventName,
+    eventSystemFlags,
+    targetContainer,
+    nativeEvent
+  );
 }
 
 export function getEventPriority(domEventName) {
