@@ -4,6 +4,7 @@ import {
 } from "../DOMEventProperties";
 import { IS_CAPTURE_PHASE } from "../EventSystemFlags";
 import { SyntheticPointerEvent, SyntheticEvent } from "../SyntheticEvent";
+import { accumulateSinglePhaseListeners } from "../DOMPluginEventSystem";
 
 function extractEvents(
   dispatchQueue,
@@ -28,7 +29,24 @@ function extractEvents(
 
   const accumulateTargetOnly = !inCapturePhase && domEventName === "scroll";
 
-  const listeners = accumulateSinglePhaseListeners(targetInst, reactName, nativeEvent.type, inCapturePhase, accumulateTargetOnly, nativeEvent)
+  const listeners = accumulateSinglePhaseListeners(
+    targetInst,
+    reactName,
+    nativeEvent.type,
+    inCapturePhase,
+    accumulateTargetOnly,
+    nativeEvent
+  );
+  if (listeners.length > 0) {
+    const event = new SyntheticEventCtor(
+      reactName,
+      reactEventType,
+      null,
+      nativeEvent,
+      nativeEventTarget
+    );
+    dispatchQueue.push({ event, listeners });
+  }
 }
 
 export { registerSimpleEvents as registerEvents, extractEvents };

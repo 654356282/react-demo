@@ -1,4 +1,8 @@
-import { HostPortal, HostRoot } from "@react/react-reconciler/ReactWorkTags";
+import {
+  HostComponent,
+  HostPortal,
+  HostRoot,
+} from "@react/react-reconciler/ReactWorkTags";
 import { batchedUpdates } from "./ReactDOMUpdateBatching";
 import { allNativeEvents } from "./EventRegistry";
 import {
@@ -9,6 +13,11 @@ import {
 import * as SimpleEventPlugin from "./plugins/SimpleEventPlugin";
 import { createEventListenerWrapperWithPriority } from "./ReactDOMEventListener";
 import getEventTarget from "./getEventTarget";
+import {
+  addEventBubbleListener,
+  addEventCaptureListener,
+} from "./EventListener";
+import getListener from "./getListener";
 
 const listeningMarker = "_reactListening" + Math.random().toString(36).slice(2);
 
@@ -40,6 +49,20 @@ function addTrappedEventListener(
     domEventName,
     eventSystemFlags
   );
+  let unsubscribeListener;
+  if (isCapturePhaseListener) {
+    unsubscribeListener = addEventCaptureListener(
+      targetContainer,
+      domEventName,
+      listener
+    );
+  } else {
+    unsubscribeListener = addEventBubbleListener(
+      targetContainer,
+      domEventName,
+      listener
+    );
+  }
 }
 
 export function listernToAllSupportedEvents(rootContainerElement) {
@@ -137,6 +160,70 @@ function dispatchEventsForPlugins(
     eventSystemFlags,
     targetContainer
   );
+  processDispatchQueue(dispatchQueue, eventSystemFlags)
+}
+
+function processDispatchQueueItemsInOrder(event, dispatchListeners, inCapturePhase) {
+
+}
+
+export function processDispatchQueue(dispatchQueue, eventSystemFlags) {
+  const inCapturePhase = (eventSystemFlags & IS_CAPTURE_PHASE) !== 0
+  for(let i = 0; i < dispatchQueue.length; i++) {
+    const {event, listeners} = dispatchQueue[i]
+
+  }
+}
+
+export function accumulateSinglePhaseListeners(
+  targetFiber,
+  reactName,
+  nativeEventType,
+  inCapturePhase,
+  accmulateTargetOnly,
+  nativeEvent
+) {
+  const captureName = reactName !== null ? reactName + "Capture" : null;
+  const reactEventName = inCapturePhase ? captureName : reactName;
+  let listeners = [];
+
+  let instance = targetFiber;
+  let lastHostComponent = null;
+  while (instance !== null) {
+    const { stateNode, tag } = instance;
+
+    if (tag === HostComponent && stateNode !== null) {
+      lastHostComponent = stateNode;
+
+      if (reactEventName !== null) {
+        const listener = getListener(instance, reactEventName);
+        if (listener != null) {
+          listeners.push(
+            createDispatchListener(instance, listener, lastHostComponent)
+          );
+        }
+      }
+    }
+
+    if (accmulateTargetOnly) {
+      break;
+    }
+
+    instance = instance.return;
+  }
+  return listeners;
+}
+
+function createDispatchListener(
+  instance: null | Fiber,
+  listener: Function,
+  currentTarget: EventTarget
+): DispatchListener {
+  return {
+    instance,
+    listener,
+    currentTarget,
+  };
 }
 
 //! 注册简单事件

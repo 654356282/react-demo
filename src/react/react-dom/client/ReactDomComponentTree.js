@@ -1,6 +1,7 @@
 const randomKey = Math.random().toString(36).slice(2);
 const internalContainerInstanceKey = "__reactContainer$" + randomKey;
 const internalInstanceKey = "__reactFiber$" + randomKey;
+const internalPropsKey = "__reactProps$" + randomKey;
 
 export function markContainerAsRoot(hostRoot, node) {
   node[internalContainerInstanceKey] = hostRoot;
@@ -26,4 +27,8 @@ export function getClosestInstanceFromNode(targetNode) {
     parentNode = targetNode.parentNode;
   }
   return null;
+}
+
+export function getFiberCurrentPropsFromNode(node) {
+  return node[internalPropsKey] || null;
 }

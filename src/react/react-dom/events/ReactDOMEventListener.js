@@ -24,9 +24,10 @@ export function createEventListenerWrapperWithPriority(
     case DiscreteEventPriority:
       listenerWrapper = dispatchDiscreteEvent;
   }
+  return listenerWrapper.bind(null, domEventName, eventSystemFlags, targetContainer)
 }
 
-//TODO: react离散事件，待完成
+// react离散事件，待完成
 function dispatchDiscreteEvent(
   domEventName,
   eventSystemFlags,
